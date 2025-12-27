@@ -51,6 +51,10 @@ jobs:
           key: main-gcc-ccache-${{ steps.get-cache-key.outputs.timestamp }}
           restore-keys: main-gcc-ccache-
 
+      - uses: alire-project/setup-alire@v5
+
+      - run: echo "$HOME/.local/share/alire/toolchains/gnat_native_15.2.1_54b1000a/bin" >> $GITHUB_PATH
+
       - name: Run Build
         run: |
           ./build.sh

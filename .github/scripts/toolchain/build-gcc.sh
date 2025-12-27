@@ -109,7 +109,7 @@ if [[ "$RUN_CONFIG" = 1 ]] || [[ ! -f "$GCC_BUILD_PATH/Makefile" ]]; then
             --host=$HOST \
             --target=$TARGET \
             --enable-static \
-            --enable-languages=c,c++,d,fortran,lto,m2,objc,obj-c++ \
+            --enable-languages=ada,c,c++,d,fortran,lto,m2,objc,obj-c++ \
             --disable-bootstrap \
             --disable-multilib \
             --with-gnu-as \
@@ -121,6 +121,10 @@ fi
 
 echo "::group::Build GCC"
     make $BUILD_MAKE_OPTIONS
+echo "::endgroup::"
+
+echo "::group::Build GNAT tools"
+    #make cross-gnattools ada.all.cross $BUILD_MAKE_OPTIONS
 echo "::endgroup::"
 
 if [[ "$RUN_INSTALL" = 1 ]]; then

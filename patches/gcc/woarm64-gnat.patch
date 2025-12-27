@@ -1,0 +1,162 @@
+diff --git a/gcc/ada/Makefile.rtl b/gcc/ada/Makefile.rtl
+index 61600adf1..37454b3e8 100644
+--- a/gcc/ada/Makefile.rtl
++++ b/gcc/ada/Makefile.rtl
+@@ -2302,8 +2302,14 @@ ifeq ($(strip $(filter-out cygwin% mingw32% pe,$(target_os))),)
+       EXTRA_GNATRTL_NONTASKING_OBJS += $(GNATRTL_128BIT_OBJS)
+       SO_OPTS = -m64 -Wl,-soname,
+     else
+-      LIBGNAT_TARGET_PAIRS += $(X86_TARGET_PAIRS)
+-      SO_OPTS = -m32 -Wl,-soname,
++      ifeq ($(strip $(filter-out aarch64, $(target_cpu))),)
++        LIBGNAT_TARGET_PAIRS += $(ATOMICS_BUILTINS_TARGET_PAIRS) $(GNATRTL_128BIT_PAIRS)
++        EXTRA_GNATRTL_NONTASKING_OBJS += $(GNATRTL_128BIT_OBJS)
++        SO_OPTS = -Wl,-soname,
++      else
++        LIBGNAT_TARGET_PAIRS += $(X86_TARGET_PAIRS)
++        SO_OPTS = -m32 -Wl,-soname,
++      endif
+     endif
+   endif
+ 
+diff --git a/gcc/ada/raise-gcc.c b/gcc/ada/raise-gcc.c
+index 34aa707ef..048bce50c 100644
+--- a/gcc/ada/raise-gcc.c
++++ b/gcc/ada/raise-gcc.c
+@@ -1636,6 +1636,15 @@ __gnat_Unwind_ForcedUnwind (_Unwind_Exception *e ATTRIBUTE_UNUSED,
+ 
+ #if defined (__SEH__) && !defined (__USING_SJLJ_EXCEPTIONS__)
+ 
++#if defined(__aarch64__)
++  #define RIP Pc
++  #define RSP Sp
++  #define EndAddress BeginAddress
++#else
++  #define RIP Rip
++  #define RSP Rsp
++#endif
++
+ #define STATUS_USER_DEFINED		(1U << 29)
+ 
+ /* From unwind-seh.c.  */
+@@ -1773,7 +1782,7 @@ __gnat_personality_seh0 (PEXCEPTION_RECORD ms_exc, void *this_frame,
+ 
+ 	      /* Get function metadata.  */
+ 	      RuntimeFunction
+-		= RtlLookupFunctionEntry (context.Rip, &ImageBase,
++		= RtlLookupFunctionEntry (context.RIP, &ImageBase,
+ 					  ms_disp->HistoryTable);
+ 
+ 	      /* Stop once we reached the frame of this function.  */
+@@ -1782,24 +1791,24 @@ __gnat_personality_seh0 (PEXCEPTION_RECORD ms_exc, void *this_frame,
+ 
+ 	      mf_func = RuntimeFunction;
+ 	      mf_imagebase = ImageBase;
+-	      mf_rsp = context.Rsp;
++	      mf_rsp = context.RSP;
+ 
+ 	      if (RuntimeFunction)
+ 		{
+ 		  /* Unwind.  */
+-		  RtlVirtualUnwind (0, ImageBase, context.Rip, RuntimeFunction,
++		  RtlVirtualUnwind (0, ImageBase, context.RIP, RuntimeFunction,
+ 				    &context, &HandlerData, &EstablisherFrame,
+ 				    NULL);
+ 		}
+ 	      else
+ 		{
+ 		  /* In case of failure, assume this is a leaf function.  */
+-		  context.Rip = *(ULONG64 *) context.Rsp;
+-		  context.Rsp += 8;
++		  context.RIP = *(ULONG64 *) context.RSP;
++		  context.RSP += 8;
+ 		}
+ 
+ 	      /* 0 means bottom of the stack.  */
+-	      if (context.Rip == 0)
++	      if (context.RIP == 0)
+ 		{
+ 		  mf_func = NULL;
+ 		  break;
+diff --git a/gcc/ada/rtinit.c b/gcc/ada/rtinit.c
+index 6a1355298..400537dfc 100644
+--- a/gcc/ada/rtinit.c
++++ b/gcc/ada/rtinit.c
+@@ -72,6 +72,7 @@ int __gnat_rt_init_count = 0;
+ #if defined (__MINGW32__)
+ #define WIN32_LEAN_AND_MEAN
+ #include "mingw32.h"
++#include <stdlib.h>
+ #include <windows.h>
+ 
+ extern void __gnat_init_float (void);
+diff --git a/gcc/ada/tracebak.c b/gcc/ada/tracebak.c
+index acc3dd31b..0b0fc73b0 100644
+--- a/gcc/ada/tracebak.c
++++ b/gcc/ada/tracebak.c
+@@ -98,6 +98,14 @@ extern void (*Unlock_Task) (void);
+ 
+ #define IS_BAD_PTR(ptr) (IsBadCodePtr((FARPROC)ptr))
+ 
++#if defined(__aarch64__)
++  #define RIP Pc
++  #define RSP Sp
++#else
++  #define RIP Rip
++  #define RSP Rsp
++#endif
++
+ int
+ __gnat_backtrace (void **array,
+                   int size,
+@@ -126,29 +134,29 @@ __gnat_backtrace (void **array,
+ 
+       /* Get function metadata.  */
+       RuntimeFunction = RtlLookupFunctionEntry
+-	(context.Rip, &ImageBase, &history);
++	(context.RIP, &ImageBase, &history);
+ 
+       if (!RuntimeFunction)
+ 	{
+ 	  /* In case of failure, assume this is a leaf function.  */
+-	  context.Rip = *(ULONG64 *) context.Rsp;
+-	  context.Rsp += 8;
++	  context.RIP = *(ULONG64 *) context.RSP;
++	  context.RSP += 8;
+ 	}
+       else
+ 	{
+ 	  /* If the last unwinding step failed somehow, stop here.  */
+-	  if (IS_BAD_PTR(context.Rip))
++	  if (IS_BAD_PTR(context.RIP))
+ 	    break;
+ 
+ 	  /* Unwind.  */
+ 	  memset (&NvContext, 0, sizeof (KNONVOLATILE_CONTEXT_POINTERS));
+-	  RtlVirtualUnwind (0, ImageBase, context.Rip, RuntimeFunction,
++	  RtlVirtualUnwind (0, ImageBase, context.RIP, RuntimeFunction,
+ 			    &context, &HandlerData, &EstablisherFrame,
+ 			    &NvContext);
+ 	}
+ 
+       /* 0 means bottom of the stack.  */
+-      if (context.Rip == 0)
++      if (context.RIP == 0)
+ 	break;
+ 
+       /* Skip frames.  */
+@@ -158,11 +166,11 @@ __gnat_backtrace (void **array,
+ 	  continue;
+ 	}
+       /* Excluded frames.  */
+-      if ((void *)context.Rip >= exclude_min
+-	  && (void *)context.Rip <= exclude_max)
++      if ((void *)context.RIP >= exclude_min
++	  && (void *)context.RIP <= exclude_max)
+ 	continue;
+ 
+-      array[i++] = (void *)(context.Rip - 2);
++      array[i++] = (void *)(context.RIP - 2);
+       if (i >= size)
+ 	break;
+     }

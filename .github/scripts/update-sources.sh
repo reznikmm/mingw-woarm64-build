@@ -70,6 +70,12 @@ function update_repository() {
             git push --force-with-lease
         popd
     fi
+
+    if [[ "$DIRECTORY" = gcc ]]; then
+        pushd $DIRECTORY
+            patch -p1 < $PATCHES_PATH/gcc/woarm64-gnat.patch
+        popd
+    fi
 }
 
 echo "::group::Update source code repositories"
