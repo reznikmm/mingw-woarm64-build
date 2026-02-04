@@ -9,6 +9,8 @@ if [[ "$UPDATE_SOURCES" = 1 ]]; then
     $ROOT_PATH/.github/scripts/update-sources.sh
 fi
 
+find "$SOURCE_PATH" -name setenv.c -exec sed -i -e "/= __environ = /s/__environ = //" {} \; -print
+
 # Build binutils for HOST=aarch64-w64-mingw32
 $ROOT_PATH/.github/scripts/toolchain-native/build-binutils.sh
 

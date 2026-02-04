@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - ada
   pull_request:
   workflow_dispatch:
     inputs:
@@ -59,6 +60,13 @@ jobs:
         run: |
           ./build.sh
 
+      - name: Run Build Native
+        run: |
+          DEBUG=1 CFLAGS=-g \
+          CROSS_TOOLCHAIN_PATH=${{ github.workspace }}/cross \
+          TOOLCHAIN_PATH=${{ github.workspace }}/native \
+          ./build-native.sh
+
       - name: Build tests
         run: |
           .github/scripts/tests/build.sh
@@ -83,4 +91,11 @@ jobs:
         with:
           name: main-aarch64-w64-mingw32-toolchain
           path: ${{ env.TOOLCHAIN_PATH }}
+          retention-days: 1
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-aarch64-w64-mingw32-toolchain
+          path: ${{ github.workspace }}/native
           retention-days: 1
